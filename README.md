@@ -1742,6 +1742,997 @@ public class Program10_Alternative {
     }
 }
 ```
+# JDBC Program List — Java Database Connectivity 
+
+> **Setup Required for All Programs**
+> - Install MySQL and create database: `CREATE DATABASE company;`
+> - Download `mysql-connector-j.jar` and place it in your project folder
+> - Compile: `javac -cp .;mysql-connector-j.jar FileName.java`
+> - Run: `java -cp .;mysql-connector-j.jar FileName`
+> - Change `DB_USER` / `DB_PASS` to match your MySQL credentials
+
+---
+
+## Program 1
+
+**Question:** Write a Java program to accept the details of Employee (Eno, EName, Designation, Salary) from a user and store it into the database. *(Use Swing)*
+
+```sql
+-- Run this in MySQL first
+CREATE DATABASE IF NOT EXISTS company;
+USE company;
+CREATE TABLE IF NOT EXISTS Employee (
+    Eno         INT PRIMARY KEY,
+    EName       VARCHAR(50),
+    Designation VARCHAR(50),
+    Salary      DOUBLE
+);
+```
+
+```java
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.sql.*;
+
+public class Program1_EmployeeSwing extends JFrame implements ActionListener {
+
+    private static final String DB_URL  = "jdbc:mysql://localhost:3306/company";
+    private static final String DB_USER = "root";
+    private static final String DB_PASS = "password";
+
+    private final JTextField txtEno, txtEname, txtDesig, txtSalary;
+    private final JButton    btnInsert, btnClear, btnViewAll;
+    private final JTextArea  taOutput;
+
+    public Program1_EmployeeSwing() {
+        setTitle("Employee Registration");
+        setSize(520, 480);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setLayout(new BorderLayout(10, 10));
+
+        JPanel formPanel = new JPanel(new GridBagLayout());
+        formPanel.setBorder(BorderFactory.createTitledBorder("Enter Employee Details"));
+        GridBagConstraints g = new GridBagConstraints();
+        g.insets = new Insets(6, 10, 6, 10);
+        g.fill   = GridBagConstraints.HORIZONTAL;
+
+        String[]     labels = {"Employee No:", "Employee Name:", "Designation:", "Salary:"};
+        txtEno    = new JTextField(18);
+        txtEname  = new JTextField(18);
+        txtDesig  = new JTextField(18);
+        txtSalary = new JTextField(18);
+        JTextField[] fields = {txtEno, txtEname, txtDesig, txtSalary};
+
+        for (int i = 0; i < labels.length; i++) {
+            g.gridx = 0; g.gridy = i; g.weightx = 0.3;
+            formPanel.add(new JLabel(labels[i]), g);
+            g.gridx = 1; g.weightx = 0.7;
+            formPanel.add(fields[i], g);
+        }
+
+        JPanel btnPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 15, 5));
+        btnInsert  = new JButton("Insert");
+        btnClear   = new JButton("Clear");
+        btnViewAll = new JButton("View All");
+        btnInsert.addActionListener(this);
+        btnClear.addActionListener(this);
+        btnViewAll.addActionListener(this);
+        btnPanel.add(btnInsert);
+        btnPanel.add(btnClear);
+        btnPanel.add(btnViewAll);
+
+        taOutput = new JTextArea(8, 40);
+        taOutput.setEditable(false);
+        taOutput.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        JScrollPane sp = new JScrollPane(taOutput);
+        sp.setBorder(BorderFactory.createTitledBorder("Output"));
+
+        add(formPanel, BorderLayout.NORTH);
+        add(btnPanel,  BorderLayout.CENTER);
+        add(sp,        BorderLayout.SOUTH);
+        setLocationRelativeTo(null);
+        setVisible(true);
+    }
+
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        if (e.getSource() == btnClear) {
+            txtEno.setText(""); txtEname.setText("");
+            txtDesig.setText(""); txtSalary.setText("");
+            taOutput.setText(""); return;
+        }
+        if (e.getSource() == btnViewAll) { displayAll(); return; }
+
+        try {
+            int    eno   = Integer.parseInt(txtEno.getText().trim());
+            String name  = txtEname.getText().trim();
+            String desig = txtDesig.getText().trim();
+            double sal   = Double.parseDouble(txtSalary.getText().trim());
+
+            if (name.isEmpty() || desig.isEmpty())
+                throw new IllegalArgumentException("Name/Designation cannot be empty.");
+
+            try (Connection con = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS);
+                 PreparedStatement ps = con.prepareStatement(
+                     "INSERT INTO Employee (Eno, EName, Designation, Salary) VALUES (?,?,?,?)")) {
+                ps.setInt(1, eno); ps.setString(2, name);
+                ps.setString(3, desig); ps.setDouble(4, sal);
+                int rows = ps.executeUpdate();
+                taOutput.setText(rows > 0
+                    ? "Record inserted: Eno=" + eno + ", " + name + ", " + desig + ", " + sal
+                    : "Insert failed.");
+                JOptionPane.showMessageDialog(this, "Employee inserted successfully!",
+                    "Success", JOptionPane.INFORMATION_MESSAGE);
+            }
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Eno and Salary must be valid numbers.",
+                "Input Error", JOptionPane.ERROR_MESSAGE);
+        } catch (IllegalArgumentException ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Validation", JOptionPane.WARNING_MESSAGE);
+        } catch (SQLException ex) {
+            JOptionPane.showMessageDialog(this, "DB Error: " + ex.getMessage(),
+                "SQL Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void displayAll() {
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format("%-6s %-20s %-15s %-10s%n", "Eno", "EName", "Designation", "Salary"));
+        sb.append("-".repeat(55)).append("\n");
+        try (Connection con = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS);
+             ResultSet rs = con.createStatement().executeQuery("SELECT * FROM Employee")) {
+            while (rs.next())
+                sb.append(String.format("%-6d %-20s %-15s %-10.2f%n",
+                    rs.getInt("Eno"), rs.getString("EName"),
+                    rs.getString("Designation"), rs.getDouble("Salary")));
+        } catch (SQLException ex) { sb.append("Error: ").append(ex.getMessage()); }
+        taOutput.setText(sb.toString());
+    }
+
+    public static void main(String[] args) {
+        try { Class.forName("com.mysql.cj.jdbc.Driver"); }
+        catch (ClassNotFoundException ex) { System.err.println("Driver not found."); }
+        SwingUtilities.invokeLater(Program1_EmployeeSwing::new);
+    }
+}
+```
+
+**Sample Output:**
+```
+A Swing window opens with fields: Employee No, Employee Name, Designation, Salary.
+After filling and clicking Insert:
+  Popup: "Employee inserted successfully!"
+  Output area: Record inserted: Eno=101, Alice, Manager, 75000.0
+
+Clicking View All:
+Eno    EName                Designation     Salary
+-------------------------------------------------------
+101    Alice                Manager         75000.00
+102    Bob                  Developer       60000.00
+```
+
+---
+
+## Program 2
+
+**Question:** Write a Java program for the following:
+- i. To create a `Product(Pid, Pname, Price)` table.
+- ii. Insert at least five records into the table.
+- iii. Display all the records from the table.
+
+```java
+import java.sql.*;
+
+public class Program2_ProductTable {
+
+    static final String URL  = "jdbc:mysql://localhost:3306/company";
+    static final String USER = "root";
+    static final String PASS = "password";
+
+    public static void main(String[] args) {
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            Connection con = DriverManager.getConnection(URL, USER, PASS);
+            Statement  st  = con.createStatement();
+
+            // i. Create table
+            String createSQL =
+                "CREATE TABLE IF NOT EXISTS Product (" +
+                "  Pid   INT PRIMARY KEY AUTO_INCREMENT," +
+                "  Pname VARCHAR(60)  NOT NULL," +
+                "  Price DECIMAL(10,2) NOT NULL" +
+                ")";
+            st.execute(createSQL);
+            System.out.println("Step i  : Product table created successfully.");
+
+            // ii. Insert five records
+            st.execute("DELETE FROM Product");
+            String insertSQL = "INSERT INTO Product (Pname, Price) VALUES (?,?)";
+            PreparedStatement ps = con.prepareStatement(insertSQL);
+
+            Object[][] products = {
+                {"Laptop",             55000.00},
+                {"Smartphone",         18999.00},
+                {"Wireless Mouse",       999.50},
+                {"Mechanical Keyboard", 3499.00},
+                {"USB-C Hub",           1299.75}
+            };
+
+            for (Object[] row : products) {
+                ps.setString(1, (String) row[0]);
+                ps.setDouble(2, (Double) row[1]);
+                ps.addBatch();
+            }
+            int[] counts = ps.executeBatch();
+            System.out.println("Step ii : " + counts.length + " records inserted.");
+            ps.close();
+
+            // iii. Display all records
+            System.out.println("\nStep iii: All Product Records");
+            System.out.println("-".repeat(50));
+            System.out.printf("%-5s  %-25s  %s%n", "Pid", "Pname", "Price");
+            System.out.println("-".repeat(50));
+
+            ResultSet rs = st.executeQuery("SELECT * FROM Product ORDER BY Pid");
+            while (rs.next()) {
+                System.out.printf("%-5d  %-25s  %.2f%n",
+                    rs.getInt("Pid"),
+                    rs.getString("Pname"),
+                    rs.getDouble("Price"));
+            }
+            System.out.println("-".repeat(50));
+
+            rs.close(); st.close(); con.close();
+
+        } catch (ClassNotFoundException ex) {
+            System.err.println("MySQL Driver not found: " + ex.getMessage());
+        } catch (SQLException ex) {
+            System.err.println("SQL Error: " + ex.getMessage());
+        }
+    }
+}
+```
+
+**Sample Output:**
+```
+Step i  : Product table created successfully.
+Step ii : 5 records inserted.
+
+Step iii: All Product Records
+--------------------------------------------------
+Pid    Pname                      Price
+--------------------------------------------------
+1      Laptop                     55000.00
+2      Smartphone                 18999.00
+3      Wireless Mouse             999.50
+4      Mechanical Keyboard        3499.00
+5      USB-C Hub                  1299.75
+--------------------------------------------------
+```
+
+---
+
+## Program 3
+
+**Question:** Write a Java program to display information about all columns in the `DONAR` table using `ResultSetMetaData`.
+
+```sql
+-- Run in MySQL first
+USE company;
+CREATE TABLE IF NOT EXISTS DONAR (
+    DonorID   INT PRIMARY KEY AUTO_INCREMENT,
+    DonorName VARCHAR(60),
+    BloodGroup VARCHAR(5),
+    DonorAge  INT,
+    City      VARCHAR(40)
+);
+INSERT INTO DONAR (DonorName, BloodGroup, DonorAge, City) VALUES
+('Amit Sharma',  'A+', 28, 'Mumbai'),
+('Sneha Patil',  'B-', 34, 'Pune'),
+('Ravi Kumar',   'O+', 22, 'Delhi');
+```
+
+```java
+import java.sql.*;
+
+public class Program3_ResultSetMetaData {
+
+    static final String URL  = "jdbc:mysql://localhost:3306/company";
+    static final String USER = "root";
+    static final String PASS = "password";
+
+    public static void main(String[] args) {
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            Connection con = DriverManager.getConnection(URL, USER, PASS);
+            Statement  st  = con.createStatement();
+
+            ResultSet rs = st.executeQuery("SELECT * FROM DONAR");
+
+            // Retrieve metadata
+            ResultSetMetaData rsmd = rs.getMetaData();
+            int colCount = rsmd.getColumnCount();
+
+            System.out.println("=".repeat(60));
+            System.out.println("  Column Information for Table: DONAR");
+            System.out.println("=".repeat(60));
+            System.out.printf("%-5s %-20s %-15s %-8s %-8s%n",
+                "No.", "Column Name", "Data Type", "Size", "Nullable");
+            System.out.println("-".repeat(60));
+
+            for (int i = 1; i <= colCount; i++) {
+                System.out.printf("%-5d %-20s %-15s %-8d %-8s%n",
+                    i,
+                    rsmd.getColumnName(i),
+                    rsmd.getColumnTypeName(i),
+                    rsmd.getColumnDisplaySize(i),
+                    rsmd.isNullable(i) == ResultSetMetaData.columnNullable ? "YES" : "NO"
+                );
+            }
+
+            System.out.println("=".repeat(60));
+            System.out.println("Total Columns: " + colCount);
+            System.out.println("\nAdditional Info:");
+            System.out.println("-".repeat(40));
+            for (int i = 1; i <= colCount; i++) {
+                System.out.println("Column " + i + " : " + rsmd.getColumnName(i));
+                System.out.println("  Table Name   : " + rsmd.getTableName(i));
+                System.out.println("  Class Name   : " + rsmd.getColumnClassName(i));
+                System.out.println("  Is AutoIncr  : " + rsmd.isAutoIncrement(i));
+                System.out.println("  Is ReadOnly  : " + rsmd.isReadOnly(i));
+                System.out.println();
+            }
+
+            rs.close(); st.close(); con.close();
+
+        } catch (ClassNotFoundException ex) {
+            System.err.println("Driver not found: " + ex.getMessage());
+        } catch (SQLException ex) {
+            System.err.println("SQL Error: " + ex.getMessage());
+        }
+    }
+}
+```
+
+**Sample Output:**
+```
+============================================================
+  Column Information for Table: DONAR
+============================================================
+No.   Column Name          Data Type       Size     Nullable
+------------------------------------------------------------
+1     DonorID              INT             11       NO
+2     DonorName            VARCHAR         60       YES
+3     BloodGroup           VARCHAR         5        YES
+4     DonorAge             INT             11       YES
+5     City                 VARCHAR         40       YES
+============================================================
+Total Columns: 5
+
+Additional Info:
+----------------------------------------
+Column 1 : DonorID
+  Table Name   : DONAR
+  Class Name   : java.lang.Integer
+  Is AutoIncr  : true
+  Is ReadOnly  : false
+...
+```
+
+---
+
+## Program 4
+
+**Question:** Write a Java program to display information about the database and list all the tables in the database. *(Use `DatabaseMetaData`)*
+
+```java
+import java.sql.*;
+
+public class Program4_DatabaseMetaData {
+
+    static final String URL  = "jdbc:mysql://localhost:3306/company";
+    static final String USER = "root";
+    static final String PASS = "password";
+
+    public static void main(String[] args) {
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            Connection con = DriverManager.getConnection(URL, USER, PASS);
+
+            DatabaseMetaData dbmd = con.getMetaData();
+
+            // ── Database Information ──────────────────────
+            System.out.println("=".repeat(55));
+            System.out.println("        DATABASE INFORMATION");
+            System.out.println("=".repeat(55));
+            System.out.println("Database Product Name    : " + dbmd.getDatabaseProductName());
+            System.out.println("Database Product Version : " + dbmd.getDatabaseProductVersion());
+            System.out.println("JDBC Driver Name         : " + dbmd.getDriverName());
+            System.out.println("JDBC Driver Version      : " + dbmd.getDriverVersion());
+            System.out.println("JDBC URL                 : " + dbmd.getURL());
+            System.out.println("Username                 : " + dbmd.getUserName());
+            System.out.println("Max Connections          : " + dbmd.getMaxConnections());
+            System.out.println("Supports Transactions    : " + dbmd.supportsTransactions());
+            System.out.println("Supports Stored Procs    : " + dbmd.supportsStoredProcedures());
+            System.out.println("Read Only                : " + dbmd.isReadOnly());
+            System.out.println("=".repeat(55));
+
+            // ── List All Tables ───────────────────────────
+            System.out.println("\nTables in database 'company':");
+            System.out.println("-".repeat(40));
+            System.out.printf("%-5s  %-25s  %-10s%n", "No.", "Table Name", "Table Type");
+            System.out.println("-".repeat(40));
+
+            String[] types = {"TABLE"};
+            ResultSet rs = dbmd.getTables(null, null, "%", types);
+            int count = 1;
+            while (rs.next()) {
+                System.out.printf("%-5d  %-25s  %-10s%n",
+                    count++,
+                    rs.getString("TABLE_NAME"),
+                    rs.getString("TABLE_TYPE"));
+            }
+            System.out.println("-".repeat(40));
+            System.out.println("Total Tables: " + (count - 1));
+
+            rs.close(); con.close();
+
+        } catch (ClassNotFoundException ex) {
+            System.err.println("Driver not found: " + ex.getMessage());
+        } catch (SQLException ex) {
+            System.err.println("SQL Error: " + ex.getMessage());
+        }
+    }
+}
+```
+
+**Sample Output:**
+```
+=======================================================
+        DATABASE INFORMATION
+=======================================================
+Database Product Name    : MySQL
+Database Product Version : 8.0.33
+JDBC Driver Name         : MySQL Connector/J
+JDBC Driver Version      : mysql-connector-j-8.0.33
+JDBC URL                 : jdbc:mysql://localhost:3306/company
+Username                 : root@localhost
+Max Connections          : 151
+Supports Transactions    : true
+Supports Stored Procs    : true
+Read Only                : false
+=======================================================
+
+Tables in database 'company':
+----------------------------------------
+No.    Table Name                Table Type
+----------------------------------------
+1      DONAR                     TABLE
+2      Employee                  TABLE
+3      Product                   TABLE
+4      Teacher                   TABLE
+----------------------------------------
+Total Tables: 4
+```
+
+---
+
+## Program 5
+
+**Question:** Write a Java program to accept the details of Teacher (TNo, TName, Subject). Insert at least 5 records into Teacher table and display the details of Teacher who is teaching "JAVA" Subject. *(Use `PreparedStatement` Interface)*
+
+```sql
+-- Run in MySQL first
+USE company;
+CREATE TABLE IF NOT EXISTS Teacher (
+    TNo     INT PRIMARY KEY,
+    TName   VARCHAR(60),
+    Subject VARCHAR(50)
+);
+```
+
+```java
+import java.sql.*;
+
+public class Program5_TeacherPreparedStatement {
+
+    static final String URL  = "jdbc:mysql://localhost:3306/company";
+    static final String USER = "root";
+    static final String PASS = "password";
+
+    public static void main(String[] args) {
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            Connection con = DriverManager.getConnection(URL, USER, PASS);
+
+            // ── Insert 5 Teacher records ──────────────────
+            con.createStatement().execute("DELETE FROM Teacher");
+
+            PreparedStatement psInsert = con.prepareStatement(
+                "INSERT INTO Teacher (TNo, TName, Subject) VALUES (?,?,?)");
+
+            Object[][] teachers = {
+                {1, "Prof. Anita Desai",   "JAVA"},
+                {2, "Prof. Rahul Mehta",   "Python"},
+                {3, "Prof. Sneha Joshi",   "JAVA"},
+                {4, "Prof. Kiran Patil",   "Database"},
+                {5, "Prof. Vijay Sharma",  "C++"}
+            };
+
+            for (Object[] t : teachers) {
+                psInsert.setInt(1, (Integer) t[0]);
+                psInsert.setString(2, (String)  t[1]);
+                psInsert.setString(3, (String)  t[2]);
+                psInsert.addBatch();
+            }
+            int[] result = psInsert.executeBatch();
+            System.out.println(result.length + " teacher records inserted.\n");
+            psInsert.close();
+
+            // ── Display teachers teaching JAVA ────────────
+            PreparedStatement psSelect = con.prepareStatement(
+                "SELECT * FROM Teacher WHERE Subject = ?");
+            psSelect.setString(1, "JAVA");
+            ResultSet rs = psSelect.executeQuery();
+
+            System.out.println("Teachers teaching JAVA:");
+            System.out.println("-".repeat(45));
+            System.out.printf("%-5s  %-25s  %-10s%n", "TNo", "TName", "Subject");
+            System.out.println("-".repeat(45));
+
+            boolean found = false;
+            while (rs.next()) {
+                found = true;
+                System.out.printf("%-5d  %-25s  %-10s%n",
+                    rs.getInt("TNo"),
+                    rs.getString("TName"),
+                    rs.getString("Subject"));
+            }
+            if (!found) System.out.println("No teachers found for JAVA.");
+            System.out.println("-".repeat(45));
+
+            rs.close(); psSelect.close(); con.close();
+
+        } catch (ClassNotFoundException ex) {
+            System.err.println("Driver not found: " + ex.getMessage());
+        } catch (SQLException ex) {
+            System.err.println("SQL Error: " + ex.getMessage());
+        }
+    }
+}
+```
+
+**Sample Output:**
+```
+5 teacher records inserted.
+
+Teachers teaching JAVA:
+---------------------------------------------
+TNo    TName                      Subject
+---------------------------------------------
+1      Prof. Anita Desai          JAVA
+3      Prof. Sneha Joshi          JAVA
+---------------------------------------------
+```
+
+---
+
+## Program 6
+
+**Question:** Write a Menu Driven program in Java for the following. Assume Employee table with attributes (ENo, EName, Salary) is already created.
+1. Insert  2. Update  3. Display  4. Exit
+
+```java
+import java.sql.*;
+import java.util.Scanner;
+
+public class Program6_MenuDrivenEmployee {
+
+    static final String URL  = "jdbc:mysql://localhost:3306/company";
+    static final String USER = "root";
+    static final String PASS = "password";
+    static Connection con;
+
+    public static void main(String[] args) {
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            con = DriverManager.getConnection(URL, USER, PASS);
+
+            // Ensure table exists
+            con.createStatement().execute(
+                "CREATE TABLE IF NOT EXISTS Employee (" +
+                "  Eno    INT PRIMARY KEY," +
+                "  EName  VARCHAR(50)," +
+                "  Salary DOUBLE)");
+
+            Scanner sc = new Scanner(System.in);
+            int choice;
+
+            do {
+                System.out.println("\n===== Employee Menu =====");
+                System.out.println("1. Insert");
+                System.out.println("2. Update");
+                System.out.println("3. Display");
+                System.out.println("4. Exit");
+                System.out.print("Enter choice: ");
+                choice = Integer.parseInt(sc.nextLine().trim());
+
+                switch (choice) {
+                    case 1 -> insertEmployee(sc);
+                    case 2 -> updateEmployee(sc);
+                    case 3 -> displayAll();
+                    case 4 -> System.out.println("Exiting... Goodbye!");
+                    default -> System.out.println("Invalid choice. Try again.");
+                }
+            } while (choice != 4);
+
+            sc.close(); con.close();
+
+        } catch (ClassNotFoundException ex) {
+            System.err.println("Driver not found: " + ex.getMessage());
+        } catch (SQLException ex) {
+            System.err.println("SQL Error: " + ex.getMessage());
+        }
+    }
+
+    static void insertEmployee(Scanner sc) throws SQLException {
+        System.out.print("Enter Employee No   : "); int eno    = Integer.parseInt(sc.nextLine().trim());
+        System.out.print("Enter Employee Name : "); String name = sc.nextLine().trim();
+        System.out.print("Enter Salary        : "); double sal  = Double.parseDouble(sc.nextLine().trim());
+
+        PreparedStatement ps = con.prepareStatement(
+            "INSERT INTO Employee (Eno, EName, Salary) VALUES (?,?,?)");
+        ps.setInt(1, eno); ps.setString(2, name); ps.setDouble(3, sal);
+        int rows = ps.executeUpdate();
+        System.out.println(rows > 0 ? "Employee inserted successfully." : "Insert failed.");
+        ps.close();
+    }
+
+    static void updateEmployee(Scanner sc) throws SQLException {
+        System.out.print("Enter Employee No to update : "); int eno = Integer.parseInt(sc.nextLine().trim());
+        System.out.print("Enter new Salary            : "); double sal = Double.parseDouble(sc.nextLine().trim());
+
+        PreparedStatement ps = con.prepareStatement(
+            "UPDATE Employee SET Salary = ? WHERE Eno = ?");
+        ps.setDouble(1, sal); ps.setInt(2, eno);
+        int rows = ps.executeUpdate();
+        System.out.println(rows > 0
+            ? "Salary updated for Eno=" + eno
+            : "No employee found with Eno=" + eno);
+        ps.close();
+    }
+
+    static void displayAll() throws SQLException {
+        ResultSet rs = con.createStatement().executeQuery("SELECT * FROM Employee ORDER BY Eno");
+        System.out.println("\n" + "-".repeat(45));
+        System.out.printf("%-6s  %-20s  %-10s%n", "Eno", "EName", "Salary");
+        System.out.println("-".repeat(45));
+        boolean found = false;
+        while (rs.next()) {
+            found = true;
+            System.out.printf("%-6d  %-20s  %-10.2f%n",
+                rs.getInt("Eno"), rs.getString("EName"), rs.getDouble("Salary"));
+        }
+        if (!found) System.out.println("No records found.");
+        System.out.println("-".repeat(45));
+        rs.close();
+    }
+}
+```
+
+**Sample Output:**
+```
+===== Employee Menu =====
+1. Insert
+2. Update
+3. Display
+4. Exit
+Enter choice: 1
+Enter Employee No   : 101
+Enter Employee Name : Alice
+Enter Salary        : 75000
+Employee inserted successfully.
+
+Enter choice: 3
+---------------------------------------------
+Eno     EName                 Salary
+---------------------------------------------
+101     Alice                 75000.00
+---------------------------------------------
+
+Enter choice: 2
+Enter Employee No to update : 101
+Enter new Salary            : 80000
+Salary updated for Eno=101
+
+Enter choice: 4
+Exiting... Goodbye!
+```
+
+---
+
+## Program 7
+
+**Question:** Write a Java program to delete the details of a given employee (ENo, EName, Salary). Accept employee ID through command line. *(Use `PreparedStatement` Interface)*
+
+```java
+import java.sql.*;
+
+public class Program7_DeleteEmployee {
+
+    static final String URL  = "jdbc:mysql://localhost:3306/company";
+    static final String USER = "root";
+    static final String PASS = "password";
+
+    public static void main(String[] args) {
+
+        // Accept ENo from command line argument
+        if (args.length == 0) {
+            System.out.println("Usage: java Program7_DeleteEmployee <EmployeeNo>");
+            System.out.println("Example: java -cp .;mysql-connector-j.jar Program7_DeleteEmployee 101");
+            return;
+        }
+
+        int eno;
+        try {
+            eno = Integer.parseInt(args[0]);
+        } catch (NumberFormatException ex) {
+            System.err.println("Invalid Employee No. Please enter a valid integer.");
+            return;
+        }
+
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+            Connection con = DriverManager.getConnection(URL, USER, PASS);
+
+            // First display the record to be deleted
+            PreparedStatement psSelect = con.prepareStatement(
+                "SELECT * FROM Employee WHERE Eno = ?");
+            psSelect.setInt(1, eno);
+            ResultSet rs = psSelect.executeQuery();
+
+            if (!rs.next()) {
+                System.out.println("No employee found with Eno = " + eno);
+                rs.close(); psSelect.close(); con.close(); return;
+            }
+
+            System.out.println("Record to be deleted:");
+            System.out.println("-".repeat(45));
+            System.out.printf("%-6s  %-20s  %-10s%n", "Eno", "EName", "Salary");
+            System.out.println("-".repeat(45));
+            System.out.printf("%-6d  %-20s  %-10.2f%n",
+                rs.getInt("Eno"), rs.getString("EName"), rs.getDouble("Salary"));
+            System.out.println("-".repeat(45));
+            rs.close(); psSelect.close();
+
+            // Delete using PreparedStatement
+            PreparedStatement psDelete = con.prepareStatement(
+                "DELETE FROM Employee WHERE Eno = ?");
+            psDelete.setInt(1, eno);
+            int rows = psDelete.executeUpdate();
+
+            if (rows > 0)
+                System.out.println("Employee with Eno=" + eno + " deleted successfully.");
+            else
+                System.out.println("Deletion failed.");
+
+            psDelete.close(); con.close();
+
+        } catch (ClassNotFoundException ex) {
+            System.err.println("Driver not found: " + ex.getMessage());
+        } catch (SQLException ex) {
+            System.err.println("SQL Error: " + ex.getMessage());
+        }
+    }
+}
+```
+
+**Sample Output:**
+```
+$ java -cp .;mysql-connector-j.jar Program7_DeleteEmployee 101
+
+Record to be deleted:
+---------------------------------------------
+Eno     EName                 Salary
+---------------------------------------------
+101     Alice                 80000.00
+---------------------------------------------
+Employee with Eno=101 deleted successfully.
+
+$ java -cp .;mysql-connector-j.jar Program7_DeleteEmployee 999
+No employee found with Eno = 999
+```
+
+---
+
+## Program 8
+
+**Question:** Write a Java program to create a PROJECT table with fields `project_id`, `Project_name`, `Project_description`, `Project_Status`. Insert values in the table. Display all the details of the PROJECT table in a tabular format on the screen. *(Using Swing)*
+
+```java
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+import java.sql.*;
+
+public class Program8_ProjectSwing extends JFrame {
+
+    private static final String URL  = "jdbc:mysql://localhost:3306/company";
+    private static final String USER = "root";
+    private static final String PASS = "password";
+
+    private final JTable     table;
+    private final DefaultTableModel model;
+    private final JLabel     lblStatus;
+
+    public Program8_ProjectSwing() {
+        setTitle("PROJECT Table Viewer");
+        setSize(750, 480);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setLayout(new BorderLayout(10, 10));
+
+        // ── Header ────────────────────────────────────────
+        JLabel header = new JLabel("PROJECT Details", SwingConstants.CENTER);
+        header.setFont(new Font("Arial", Font.BOLD, 18));
+        header.setBorder(BorderFactory.createEmptyBorder(10, 0, 5, 0));
+        add(header, BorderLayout.NORTH);
+
+        // ── Table ─────────────────────────────────────────
+        String[] cols = {"Project ID", "Project Name", "Description", "Status"};
+        model = new DefaultTableModel(cols, 0) {
+            @Override public boolean isCellEditable(int r, int c) { return false; }
+        };
+        table = new JTable(model);
+        table.setRowHeight(24);
+        table.getTableHeader().setFont(new Font("Arial", Font.BOLD, 13));
+        table.setFont(new Font("Arial", Font.PLAIN, 12));
+        table.setSelectionBackground(new Color(173, 216, 230));
+
+        // Column widths
+        int[] widths = {80, 160, 280, 100};
+        for (int i = 0; i < widths.length; i++)
+            table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
+
+        JScrollPane sp = new JScrollPane(table);
+        sp.setBorder(BorderFactory.createTitledBorder("All Projects"));
+        add(sp, BorderLayout.CENTER);
+
+        // ── Button + Status bar ───────────────────────────
+        JPanel south = new JPanel(new BorderLayout());
+        JButton btnRefresh = new JButton("Refresh Data");
+        btnRefresh.addActionListener(e -> loadData());
+        JPanel btnPanel = new JPanel();
+        btnPanel.add(btnRefresh);
+        lblStatus = new JLabel("Ready", SwingConstants.CENTER);
+        lblStatus.setFont(new Font("Arial", Font.ITALIC, 11));
+        south.add(btnPanel,  BorderLayout.NORTH);
+        south.add(lblStatus, BorderLayout.SOUTH);
+        add(south, BorderLayout.SOUTH);
+
+        // ── Init DB then load ──────────────────────────────
+        initDatabase();
+        loadData();
+
+        setLocationRelativeTo(null);
+        setVisible(true);
+    }
+
+    private void initDatabase() {
+        try (Connection con = DriverManager.getConnection(URL, USER, PASS);
+             Statement  st  = con.createStatement()) {
+
+            st.execute(
+                "CREATE TABLE IF NOT EXISTS PROJECT (" +
+                "  project_id          INT PRIMARY KEY AUTO_INCREMENT," +
+                "  Project_name        VARCHAR(80)  NOT NULL," +
+                "  Project_description VARCHAR(200)," +
+                "  Project_Status      VARCHAR(30)" +
+                ")");
+
+            // Insert only if empty
+            ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM PROJECT");
+            rs.next();
+            if (rs.getInt(1) == 0) {
+                PreparedStatement ps = con.prepareStatement(
+                    "INSERT INTO PROJECT (Project_name, Project_description, Project_Status) VALUES (?,?,?)");
+
+                Object[][] data = {
+                    {"Hospital Mgmt System",  "Manage patient records and billing",         "Completed"},
+                    {"E-Commerce Platform",   "Online shopping with payment gateway",        "In Progress"},
+                    {"Library System",        "Book issue, return and fine management",      "Completed"},
+                    {"College ERP",           "Automate academic and admin operations",      "In Progress"},
+                    {"Chat Application",      "Real-time messaging using WebSocket",         "Pending"},
+                };
+                for (Object[] row : data) {
+                    ps.setString(1, (String) row[0]);
+                    ps.setString(2, (String) row[1]);
+                    ps.setString(3, (String) row[2]);
+                    ps.addBatch();
+                }
+                ps.executeBatch();
+                ps.close();
+            }
+            rs.close();
+            lblStatus.setText("Database initialized.");
+
+        } catch (SQLException ex) {
+            lblStatus.setText("DB Init Error: " + ex.getMessage());
+        }
+    }
+
+    private void loadData() {
+        model.setRowCount(0);
+        try (Connection con = DriverManager.getConnection(URL, USER, PASS);
+             ResultSet  rs  = con.createStatement()
+                 .executeQuery("SELECT * FROM PROJECT ORDER BY project_id")) {
+            int count = 0;
+            while (rs.next()) {
+                model.addRow(new Object[]{
+                    rs.getInt("project_id"),
+                    rs.getString("Project_name"),
+                    rs.getString("Project_description"),
+                    rs.getString("Project_Status")
+                });
+                count++;
+            }
+            lblStatus.setText("Total records loaded: " + count);
+        } catch (SQLException ex) {
+            lblStatus.setText("Load Error: " + ex.getMessage());
+        }
+    }
+
+    public static void main(String[] args) {
+        try { Class.forName("com.mysql.cj.jdbc.Driver"); }
+        catch (ClassNotFoundException ex) { System.err.println("Driver not found."); }
+        SwingUtilities.invokeLater(Program8_ProjectSwing::new);
+    }
+}
+```
+
+**Sample Output:**
+```
+A Swing window titled "PROJECT Table Viewer" opens with a JTable:
+
++------------+----------------------+--------------------------------+-----------+
+| Project ID |   Project Name       |         Description            |  Status   |
++------------+----------------------+--------------------------------+-----------+
+|     1      | Hospital Mgmt System | Manage patient records...      | Completed |
+|     2      | E-Commerce Platform  | Online shopping with payment.. | In Progr. |
+|     3      | Library System       | Book issue, return and fine... | Completed |
+|     4      | College ERP          | Automate academic and admin... | In Progr. |
+|     5      | Chat Application     | Real-time messaging using...   | Pending   |
++------------+----------------------+--------------------------------+-----------+
+Status bar: "Total records loaded: 5"
+```
+
+---
+
+## Quick Reference
+
+| Program | Topic | Key Concept |
+|---------|-------|-------------|
+| 1 | Employee (Swing + Insert) | `JFrame`, `PreparedStatement` |
+| 2 | Product (Create/Insert/Display) | `Statement`, `executeBatch()` |
+| 3 | DONAR column info | `ResultSetMetaData` |
+| 4 | Database & table list | `DatabaseMetaData` |
+| 5 | Teacher – filter by subject | `PreparedStatement` SELECT |
+| 6 | Menu-driven Employee CRUD | `Scanner`, switch-case, JDBC |
+| 7 | Delete by command-line arg | `args[]`, `PreparedStatement` DELETE |
+| 8 | Project table (Swing table) | `JTable`, `DefaultTableModel` |
+
+---
+
+## Common Errors & Fixes
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `ClassNotFoundException` | JAR not in classpath | Add `-cp .;mysql-connector-j.jar` |
+| `Access denied for user` | Wrong credentials | Check `DB_USER` / `DB_PASS` |
+| `Communications link failure` | MySQL not running | Start MySQL service |
+| `Table doesn't exist` | DDL not run | Run the SQL setup block first |
+| `Duplicate entry for key PRIMARY` | Inserting same PK twice | Use `DELETE` before re-inserting in demo |
+
 
 
 
@@ -1766,6 +2757,13 @@ public class Program10_Alternative {
 - GUI-based threading with Swing
 - Thread pools and ExecutorService
 
+**Part 3: JBDC Connection and Implementation
+- JBDC Connection
+- JBDC Statement
+- JBDC PreparedStatement
+- JBDC DatabaseMetadata
+- JBDC DriverMAnagement
+
 ### Key Concepts Mastered:
 
 ✓ Collection Framework fundamentals
@@ -1776,12 +2774,15 @@ public class Program10_Alternative {
 ✓ Resource management and pooling
 ✓ Time-based operations
 ✓ Inter-thread communication
+✓ JBDC Connection
+✓ Full Core JBDC API
+✓ Swing GUI Based Data Entry And Display
 
 ---
 
 **Complete Documentation:**
 
-- **Total Programs:** 20 (10 Collection + 10 Threading)
+- **Total Programs:** 28 (10 Collection + 10 Threading + 8 JBDC)
 - **Format:** Markdown with complete executable code
 - **Difficulty Level:** Beginner to Intermediate
 - **Topics Covered:** Collections, Threading, Synchronization
